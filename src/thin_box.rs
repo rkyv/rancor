@@ -190,29 +190,36 @@ mod tests {
         let box_int = unsafe { ThinBox::new_unchecked(10, |x| x) };
         assert_eq!(*box_int, 10);
 
-        let box_string = unsafe { ThinBox::new_unchecked("hello world".to_string(), |x| x) };
+        let box_string =
+            unsafe { ThinBox::new_unchecked("hello world".to_string(), |x| x) };
         assert_eq!(*box_string, "hello world");
     }
 
     #[test]
     fn unsized_types() {
-        let box_dyn_int = unsafe { ThinBox::new_unchecked(10, |x| x as *mut dyn DynTrait) };
+        let box_dyn_int =
+            unsafe { ThinBox::new_unchecked(10, |x| x as *mut dyn DynTrait) };
         assert_eq!(box_dyn_int.int(), 10);
 
-        let box_dyn_string =
-            unsafe { ThinBox::new_unchecked("10".to_string(), |x| x as *mut dyn DynTrait) };
+        let box_dyn_string = unsafe {
+            ThinBox::new_unchecked("10".to_string(), |x| x as *mut dyn DynTrait)
+        };
         assert_eq!(box_dyn_string.int(), 10);
 
-        let box_slice = unsafe { ThinBox::new_unchecked([1, 2, 3, 4], |x| x as *mut [i32]) };
+        let box_slice = unsafe {
+            ThinBox::new_unchecked([1, 2, 3, 4], |x| x as *mut [i32])
+        };
         assert_eq!(*box_slice, [1, 2, 3, 4]);
     }
 
     #[test]
     fn zst_dst() {
-        let box_unit_debug = unsafe { ThinBox::new_unchecked((), |x| x as *mut dyn DynTrait) };
+        let box_unit_debug =
+            unsafe { ThinBox::new_unchecked((), |x| x as *mut dyn DynTrait) };
         assert_eq!(box_unit_debug.int(), 10);
 
-        let box_empty_slice = unsafe { ThinBox::new_unchecked([], |x| x as *mut [i32]) };
+        let box_empty_slice =
+            unsafe { ThinBox::new_unchecked([], |x| x as *mut [i32]) };
         assert_eq!(*box_empty_slice, []);
     }
 }

@@ -28,7 +28,7 @@ mod boxed_error;
 #[cfg(feature = "alloc")]
 mod thin_box;
 
-use core::fmt;
+use core::{fmt, hint::unreachable_unchecked};
 
 #[cfg(feature = "std")]
 use std::error::Error as StdError;
@@ -53,40 +53,118 @@ pub trait StdError: fmt::Debug + fmt::Display {
 #[cfg(not(feature = "std"))]
 impl<T: fmt::Debug + fmt::Display + ?Sized> StdError for T {}
 
+/// An error type which can be given additional context.
+pub trait Contextual: Sized + Send + Sync + 'static {
+    /// Adds additional context to this error, returning a new error.
+    fn add_context<T>(self, context: T) -> Self
+    where
+        T: fmt::Debug + fmt::Display + Send + Sync + 'static;
+}
+
 /// An error type which can be uniformly constructed from a [`StdError`].
-pub trait Error: Sized + StdError + Send + Sync + 'static {
+pub trait Error: Contextual + StdError {
     /// Returns a new `Self` using the given [`Error`].
     ///
     /// Depending on the specific implementation, this may box the error,
     /// immediately emit a diagnostic, or discard it and only remember that some
     /// error occurred.
     fn new<T: StdError + Send + Sync + 'static>(source: T) -> Self;
+}
 
-    /// Returns a new `Self` using the [`Error`] returned by calling
-    /// `make_source`.
-    ///
-    /// Depending on the specific implementation, this may box the error or
-    /// discard it and only remember that some error occurred.
-    fn new_with<T, F>(make_source: F) -> Self
+/// Helper methods for `Context`s.
+pub trait Context {
+    /// Wraps the error value of this type with additional context.
+    fn context<C>(self, context: C) -> Self
     where
-        T: StdError + Send + Sync + 'static,
-        F: FnOnce() -> T,
+        C: fmt::Debug + fmt::Display + Send + Sync + 'static;
+
+    /// Wraps the error value of this type with additional context. The
+    /// additional context is evaluated only if an error occurred.
+    fn with_context<C, F>(self, f: F) -> Self
+    where
+        C: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        F: FnOnce() -> C;
+}
+
+impl<T, E> Context for Result<T, E>
+where
+    E: Contextual,
+{
+    fn context<C>(self, context: C) -> Self
+    where
+        C: fmt::Debug + fmt::Display + Send + Sync + 'static,
     {
-        Self::new(make_source())
+        match self {
+            x @ Ok(_) => x,
+            Err(e) => Err(e.add_context(context)),
+        }
     }
 
-    /// Adds additional context to this error, returning a new error.
-    fn context<T: fmt::Debug + fmt::Display + Send + Sync + 'static>(self, context: T) -> Self;
+    fn with_context<C, F>(self, f: F) -> Self
+    where
+        C: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        F: FnOnce() -> C,
+    {
+        match self {
+            x @ Ok(_) => x,
+            Err(e) => Err(e.add_context(f())),
+        }
+    }
 }
 
-/// A type that can produce an error.
-pub trait Fallible {
-    /// The error produced by any failing methods.
-    type Error: Error;
+pub use core::convert::Infallible;
+
+impl Contextual for Infallible {
+    fn add_context<T>(self, _: T) -> Self
+    where
+        T: fmt::Debug + fmt::Display + Send + Sync + 'static,
+    {
+        // SAFETY: `Infallible` is an enum with no variants, and so can never be
+        // constructed as the `self` parameter.
+        unsafe {
+            unreachable_unchecked();
+        }
+    }
 }
 
-/// A validation context that simply records success or failure, throwing away
-/// any detailed error messages.
+/// An error type that does not occupy any space, panicking on creation instead.
+#[derive(Debug)]
+pub enum Panic {}
+
+impl fmt::Display for Panic {
+    fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // SAFETY: `Panic` is an enum with no variants, and so can never be
+        // constructed as the `self` parameter.
+        unsafe {
+            unreachable_unchecked();
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for Panic {}
+
+impl Contextual for Panic {
+    fn add_context<T>(self, _: T) -> Self
+    where
+        T: fmt::Debug + fmt::Display + Send + Sync + 'static,
+    {
+        // SAFETY: `Panic` is an enum with no variants, and so can never be
+        // constructed as the `self` parameter.
+        unsafe {
+            unreachable_unchecked();
+        }
+    }
+}
+
+impl Error for Panic {
+    fn new<T: fmt::Display>(error: T) -> Self {
+        panic!("created a new `Panic` from: {error}");
+    }
+}
+
+/// An error type that only preserves success or failure, throwing away any more
+/// detailed error messages.
 #[derive(Debug)]
 pub struct Failure;
 
@@ -99,28 +177,17 @@ impl fmt::Display for Failure {
 #[cfg(feature = "std")]
 impl std::error::Error for Failure {}
 
-impl Error for Failure {
-    fn new<T: fmt::Display>(_: T) -> Self {
-        Self
-    }
-
-    fn new_with<T: fmt::Display, F: FnOnce() -> T>(_: F) -> Self {
-        Self
-    }
-
-    fn context<T: fmt::Display>(self, _: T) -> Self {
+impl Contextual for Failure {
+    fn add_context<T: fmt::Display>(self, _: T) -> Self {
         self
     }
 }
 
-impl Fallible for Failure {
-    type Error = Self;
+impl Error for Failure {
+    fn new<T: fmt::Display>(_: T) -> Self {
+        Self
+    }
 }
 
 #[cfg(feature = "alloc")]
 pub use boxed_error::BoxedError;
-
-#[cfg(feature = "alloc")]
-impl Fallible for BoxedError {
-    type Error = Self;
-}
