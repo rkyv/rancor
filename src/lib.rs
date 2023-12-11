@@ -28,7 +28,7 @@ mod boxed_error;
 #[cfg(feature = "alloc")]
 mod thin_box;
 
-use core::{fmt, hint::unreachable_unchecked};
+use core::{fmt, hint::unreachable_unchecked, marker::PhantomData};
 
 #[cfg(feature = "std")]
 use std::error::Error as StdError;
@@ -53,16 +53,17 @@ pub trait StdError: fmt::Debug + fmt::Display {
 #[cfg(not(feature = "std"))]
 impl<T: fmt::Debug + fmt::Display + ?Sized> StdError for T {}
 
-/// An error type which can be given additional context.
-pub trait Contextual: Sized + Send + Sync + 'static {
-    /// Adds additional context to this error, returning a new error.
-    fn add_context<T>(self, context: T) -> Self
+/// A type which can add an additional trace to itself.
+pub trait Traceable: Sized + Send + Sync + 'static {
+    /// Adds an additional trace to this error, returning a new error.
+    fn add_trace<R>(self, trace: R) -> Self
     where
-        T: fmt::Debug + fmt::Display + Send + Sync + 'static;
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static;
 }
 
-/// An error type which can be uniformly constructed from a [`StdError`].
-pub trait Error: Contextual + StdError {
+/// An error type which can be uniformly constructed from a [`StdError`] and
+/// given additional context.
+pub trait Error: Traceable + StdError {
     /// Returns a new `Self` using the given [`Error`].
     ///
     /// Depending on the specific implementation, this may box the error,
@@ -71,53 +72,78 @@ pub trait Error: Contextual + StdError {
     fn new<T: StdError + Send + Sync + 'static>(source: T) -> Self;
 }
 
+/// A type with fallible operations that return its associated error type.
+pub trait Fallible {
+    /// The error type associated with this type's operations.
+    type Error;
+}
+
+/// An empty type that chooses `E` as its erroring strategy.
+#[derive(Default)]
+pub struct Strategy<E> {
+    _error: PhantomData<E>,
+}
+
+impl<E> Fallible for Strategy<E> {
+    type Error = E;
+}
+
+impl<E> Strategy<E> {
+    /// Constructs a new `Strategy`.
+    pub const fn new() -> Self {
+        Self {
+            _error: PhantomData,
+        }
+    }
+}
+
 /// Helper methods for `Context`s.
-pub trait Context {
+pub trait Trace {
     /// Wraps the error value of this type with additional context.
-    fn context<C>(self, context: C) -> Self
+    fn trace<R>(self, trace: R) -> Self
     where
-        C: fmt::Debug + fmt::Display + Send + Sync + 'static;
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static;
 
     /// Wraps the error value of this type with additional context. The
     /// additional context is evaluated only if an error occurred.
-    fn with_context<C, F>(self, f: F) -> Self
+    fn with_trace<R, F>(self, f: F) -> Self
     where
-        C: fmt::Debug + fmt::Display + Send + Sync + 'static,
-        F: FnOnce() -> C;
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        F: FnOnce() -> R;
 }
 
-impl<T, E> Context for Result<T, E>
+impl<T, E> Trace for Result<T, E>
 where
-    E: Contextual,
+    E: Traceable,
 {
-    fn context<C>(self, context: C) -> Self
+    fn trace<R>(self, trace: R) -> Self
     where
-        C: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
     {
         match self {
             x @ Ok(_) => x,
-            Err(e) => Err(e.add_context(context)),
+            Err(e) => Err(e.add_trace(trace)),
         }
     }
 
-    fn with_context<C, F>(self, f: F) -> Self
+    fn with_trace<R, F>(self, f: F) -> Self
     where
-        C: fmt::Debug + fmt::Display + Send + Sync + 'static,
-        F: FnOnce() -> C,
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        F: FnOnce() -> R,
     {
         match self {
             x @ Ok(_) => x,
-            Err(e) => Err(e.add_context(f())),
+            Err(e) => Err(e.add_trace(f())),
         }
     }
 }
 
 pub use core::convert::Infallible;
 
-impl Contextual for Infallible {
-    fn add_context<T>(self, _: T) -> Self
+impl Traceable for Infallible {
+    fn add_trace<R>(self, _: R) -> Self
     where
-        T: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
     {
         // SAFETY: `Infallible` is an enum with no variants, and so can never be
         // constructed as the `self` parameter.
@@ -144,10 +170,10 @@ impl fmt::Display for Panic {
 #[cfg(feature = "std")]
 impl std::error::Error for Panic {}
 
-impl Contextual for Panic {
-    fn add_context<T>(self, _: T) -> Self
+impl Traceable for Panic {
+    fn add_trace<R>(self, _: R) -> Self
     where
-        T: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
     {
         // SAFETY: `Panic` is an enum with no variants, and so can never be
         // constructed as the `self` parameter.
@@ -177,14 +203,17 @@ impl fmt::Display for Failure {
 #[cfg(feature = "std")]
 impl std::error::Error for Failure {}
 
-impl Contextual for Failure {
-    fn add_context<T: fmt::Display>(self, _: T) -> Self {
+impl Traceable for Failure {
+    fn add_trace<R>(self, _: R) -> Self
+    where
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+    {
         self
     }
 }
 
 impl Error for Failure {
-    fn new<T: fmt::Display>(_: T) -> Self {
+    fn new<T: StdError + Send + Sync + 'static>(_: T) -> Self {
         Self
     }
 }

@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::{thin_box::ThinBox, Contextual, Error, StdError};
+use crate::{thin_box::ThinBox, Error, StdError, Traceable};
 
 #[ptr_meta::pointee]
 trait ErrorContext: fmt::Debug + fmt::Display + Send + Sync + 'static {}
@@ -51,17 +51,17 @@ impl std::error::Error for BoxedError {
     }
 }
 
-impl Contextual for BoxedError {
-    fn add_context<T>(self, context: T) -> Self
+impl Traceable for BoxedError {
+    fn add_trace<R>(self, trace: R) -> Self
     where
-        T: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
     {
         Self::new(ErrorWithContext {
             error: self,
             // SAFETY: The provided closure returns the same pointer unsized to
             // a `dyn ErrorContext`.
             context: unsafe {
-                ThinBox::new_unchecked(context, |ptr| ptr as *mut _)
+                ThinBox::new_unchecked(trace, |ptr| ptr as *mut _)
             },
         })
     }
