@@ -28,7 +28,12 @@ mod boxed_error;
 #[cfg(feature = "alloc")]
 mod thin_box;
 
-use core::{fmt, hint::unreachable_unchecked, marker::PhantomData};
+use core::{
+    fmt,
+    hint::unreachable_unchecked,
+    marker::PhantomData,
+    ops::{Deref, DerefMut},
+};
 
 #[cfg(feature = "std")]
 use std::error::Error as StdError;
@@ -78,22 +83,42 @@ pub trait Fallible {
     type Error;
 }
 
-/// An empty type that chooses `E` as its erroring strategy.
-#[derive(Default)]
-pub struct Strategy<E> {
+/// Equips a type with a `Fallible` implementation that chooses `E` as its error
+/// type.
+#[repr(transparent)]
+pub struct Strategy<T: ?Sized, E> {
     _error: PhantomData<E>,
+    inner: T,
 }
 
-impl<E> Fallible for Strategy<E> {
+impl<T, E> Fallible for Strategy<T, E> {
     type Error = E;
 }
 
-impl<E> Strategy<E> {
-    /// Constructs a new `Strategy`.
-    pub const fn new() -> Self {
-        Self {
-            _error: PhantomData,
-        }
+impl<T: ?Sized, E> Strategy<T, E> {
+    /// Wraps the given mutable reference, returning a mutable reference to a
+    /// `Strategy`.
+    pub fn wrap(inner: &mut T) -> &mut Self {
+        // SAFETY: `Strategy` is `repr(transparent)` and so has the same layout
+        // as `T`. The input and output lifetimes are the same, so mutable
+        // aliasing rules will be upheld. Finally, because the inner `T` is the
+        // final element of `Strategy`, the pointer metadata of the two pointers
+        // will be the same.
+        unsafe { core::mem::transmute::<&mut T, &mut Self>(inner) }
+    }
+}
+
+impl<T, E> Deref for Strategy<T, E> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl<T, E> DerefMut for Strategy<T, E> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
     }
 }
 
