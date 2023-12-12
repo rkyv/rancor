@@ -59,16 +59,16 @@ pub trait StdError: fmt::Debug + fmt::Display {
 impl<T: fmt::Debug + fmt::Display + ?Sized> StdError for T {}
 
 /// A type which can add an additional trace to itself.
-pub trait Traceable: Sized + Send + Sync + 'static {
+pub trait Trace: Sized + Send + Sync + 'static {
     /// Adds an additional trace to this error, returning a new error.
-    fn add_trace<R>(self, trace: R) -> Self
+    fn trace<R>(self, trace: R) -> Self
     where
         R: fmt::Debug + fmt::Display + Send + Sync + 'static;
 }
 
 /// An error type which can be uniformly constructed from a [`StdError`] and
-/// given additional context.
-pub trait Error: Traceable + StdError {
+/// additional trace information.
+pub trait Error: Trace + StdError {
     /// Returns a new `Self` using the given [`Error`].
     ///
     /// Depending on the specific implementation, this may box the error,
@@ -122,51 +122,192 @@ impl<T, E> DerefMut for Strategy<T, E> {
     }
 }
 
-/// Helper methods for `Context`s.
-pub trait Trace {
-    /// Wraps the error value of this type with additional context.
-    fn trace<R>(self, trace: R) -> Self
+/// Returns the given error from this function.
+#[macro_export]
+macro_rules! fail {
+    ($($x:tt)*) => {
+        return ::core::result::Result::Err($crate::Error::new($($x)*))
+    };
+}
+
+/// Helper methods for `Result`s.
+pub trait ResultExt<T, E> {
+    /// Returns a `Result` with this error type converted to `U`.
+    fn into_error<U>(self) -> Result<T, U>
     where
+        U: Error,
+        E: StdError + Send + Sync + 'static;
+
+    /// Returns a `Result` with this error type converted to `U` and with an
+    /// additional `trace` message added.
+    fn into_trace<U, R>(self, trace: R) -> Result<T, U>
+    where
+        U: Error,
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        E: StdError + Send + Sync + 'static;
+
+    /// Returns a `Result` with this error type converted to `U` and with an
+    /// additional trace message added by evaluating the given function `f`. The
+    /// function is evaluated only if an error occurred.
+    fn into_with_trace<U, R, F>(self, f: F) -> Result<T, U>
+    where
+        U: Error,
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        F: FnOnce() -> R,
+        E: StdError + Send + Sync + 'static;
+
+    /// Adds an additional `trace` message to the error value of this type.
+    fn trace<R>(self, trace: R) -> Result<T, E>
+    where
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        E: Trace;
+
+    /// Adds an additional trace message to the error value of this type by
+    /// evaluating the given function `f`. The function is evaluated only if an
+    /// error occurred.
+    fn with_trace<R, F>(self, f: F) -> Result<T, E>
+    where
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        F: FnOnce() -> R,
+        E: Trace;
+}
+
+impl<T, E> ResultExt<T, E> for Result<T, E> {
+    fn into_error<U>(self) -> Result<T, U>
+    where
+        U: Error,
+        E: StdError + Send + Sync + 'static,
+    {
+        match self {
+            Ok(x) => Ok(x),
+            Err(e) => Err(U::new(e)),
+        }
+    }
+
+    fn into_trace<U, R>(self, trace: R) -> Result<T, U>
+    where
+        U: Error,
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        E: StdError + Send + Sync + 'static,
+    {
+        match self {
+            Ok(x) => Ok(x),
+            Err(e) => Err(U::new(e).trace(trace)),
+        }
+    }
+
+    fn into_with_trace<U, R, F>(self, f: F) -> Result<T, U>
+    where
+        U: Error,
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        F: FnOnce() -> R,
+        E: StdError + Send + Sync + 'static,
+    {
+        match self {
+            Ok(x) => Ok(x),
+            Err(e) => Err(U::new(e).trace(f())),
+        }
+    }
+
+    fn trace<R>(self, trace: R) -> Result<T, E>
+    where
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        E: Trace,
+    {
+        match self {
+            Ok(x) => Ok(x),
+            Err(e) => Err(e.trace(trace)),
+        }
+    }
+
+    fn with_trace<R, F>(self, f: F) -> Result<T, E>
+    where
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        F: FnOnce() -> R,
+        E: Trace,
+    {
+        match self {
+            Ok(x) => Ok(x),
+            Err(e) => Err(e.trace(f())),
+        }
+    }
+}
+
+/// Helper methods for `Option`s.
+pub trait OptionExt<T> {
+    /// Returns a `Result` with this error type converted to `U`.
+    fn into_error<E>(self) -> Result<T, E>
+    where
+        E: Error;
+
+    /// Returns a `Result` with this error type converted to `U` and with an
+    /// additional `trace` message added.
+    fn into_trace<E, R>(self, trace: R) -> Result<T, E>
+    where
+        E: Error,
         R: fmt::Debug + fmt::Display + Send + Sync + 'static;
 
-    /// Wraps the error value of this type with additional context. The
-    /// additional context is evaluated only if an error occurred.
-    fn with_trace<R, F>(self, f: F) -> Self
+    /// Returns a `Result` with this error type converted to `U` and with an
+    /// additional trace message added by evaluating the given function `f`. The
+    /// function is evaluated only if an error occurred.
+    fn into_with_trace<E, R, F>(self, f: F) -> Result<T, E>
     where
+        E: Error,
         R: fmt::Debug + fmt::Display + Send + Sync + 'static,
         F: FnOnce() -> R;
 }
 
-impl<T, E> Trace for Result<T, E>
-where
-    E: Traceable,
-{
-    fn trace<R>(self, trace: R) -> Self
+#[derive(Debug)]
+struct NoneError;
+
+impl fmt::Display for NoneError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "`Option` is `None`, expected `Some`")
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for NoneError {}
+
+impl<T> OptionExt<T> for Option<T> {
+    fn into_error<E>(self) -> Result<T, E>
     where
-        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        E: Error,
     {
         match self {
-            x @ Ok(_) => x,
-            Err(e) => Err(e.add_trace(trace)),
+            Some(x) => Ok(x),
+            None => Err(E::new(NoneError)),
         }
     }
 
-    fn with_trace<R, F>(self, f: F) -> Self
+    fn into_trace<E, R>(self, trace: R) -> Result<T, E>
     where
+        E: Error,
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+    {
+        match self {
+            Some(x) => Ok(x),
+            None => Err(E::new(NoneError).trace(trace)),
+        }
+    }
+
+    fn into_with_trace<E, R, F>(self, f: F) -> Result<T, E>
+    where
+        E: Error,
         R: fmt::Debug + fmt::Display + Send + Sync + 'static,
         F: FnOnce() -> R,
     {
         match self {
-            x @ Ok(_) => x,
-            Err(e) => Err(e.add_trace(f())),
+            Some(x) => Ok(x),
+            None => Err(E::new(NoneError).trace(f())),
         }
     }
 }
 
 pub use core::convert::Infallible;
 
-impl Traceable for Infallible {
-    fn add_trace<R>(self, _: R) -> Self
+impl Trace for Infallible {
+    fn trace<R>(self, _: R) -> Self
     where
         R: fmt::Debug + fmt::Display + Send + Sync + 'static,
     {
@@ -195,8 +336,8 @@ impl fmt::Display for Panic {
 #[cfg(feature = "std")]
 impl std::error::Error for Panic {}
 
-impl Traceable for Panic {
-    fn add_trace<R>(self, _: R) -> Self
+impl Trace for Panic {
+    fn trace<R>(self, _: R) -> Self
     where
         R: fmt::Debug + fmt::Display + Send + Sync + 'static,
     {
@@ -228,8 +369,8 @@ impl fmt::Display for Failure {
 #[cfg(feature = "std")]
 impl std::error::Error for Failure {}
 
-impl Traceable for Failure {
-    fn add_trace<R>(self, _: R) -> Self
+impl Trace for Failure {
+    fn trace<R>(self, _: R) -> Self
     where
         R: fmt::Debug + fmt::Display + Send + Sync + 'static,
     {

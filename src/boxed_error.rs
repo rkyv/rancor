@@ -1,31 +1,31 @@
 use core::fmt;
 
-use crate::{thin_box::ThinBox, Error, StdError, Traceable};
+use crate::{thin_box::ThinBox, Error, StdError, Trace};
 
 #[ptr_meta::pointee]
-trait ErrorContext: fmt::Debug + fmt::Display + Send + Sync + 'static {}
+trait ErrorTrace: fmt::Debug + fmt::Display + Send + Sync + 'static {}
 
-impl<T> ErrorContext for T where
+impl<T> ErrorTrace for T where
     T: fmt::Debug + fmt::Display + Send + Sync + 'static + ?Sized
 {
 }
 
 #[derive(Debug)]
-struct ErrorWithContext {
+struct ErrorWithTrace {
     error: BoxedError,
-    context: ThinBox<dyn ErrorContext>,
+    trace: ThinBox<dyn ErrorTrace>,
 }
 
-impl fmt::Display for ErrorWithContext {
+impl fmt::Display for ErrorWithTrace {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.error)?;
-        write!(f, "context: {}", self.context)?;
+        write!(f, "trace: {}", self.trace)?;
 
         Ok(())
     }
 }
 
-impl StdError for ErrorWithContext {
+impl StdError for ErrorWithTrace {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         self.error.inner.source()
     }
@@ -51,16 +51,16 @@ impl std::error::Error for BoxedError {
     }
 }
 
-impl Traceable for BoxedError {
-    fn add_trace<R>(self, trace: R) -> Self
+impl Trace for BoxedError {
+    fn trace<R>(self, trace: R) -> Self
     where
         R: fmt::Debug + fmt::Display + Send + Sync + 'static,
     {
-        Self::new(ErrorWithContext {
+        Self::new(ErrorWithTrace {
             error: self,
             // SAFETY: The provided closure returns the same pointer unsized to
-            // a `dyn ErrorContext`.
-            context: unsafe {
+            // a `dyn ErrorTrace`.
+            trace: unsafe {
                 ThinBox::new_unchecked(trace, |ptr| ptr as *mut _)
             },
         })
