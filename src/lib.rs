@@ -91,7 +91,7 @@ pub struct Strategy<T: ?Sized, E> {
     inner: T,
 }
 
-impl<T, E> Fallible for Strategy<T, E> {
+impl<T: ?Sized, E> Fallible for Strategy<T, E> {
     type Error = E;
 }
 
@@ -108,7 +108,7 @@ impl<T: ?Sized, E> Strategy<T, E> {
     }
 }
 
-impl<T, E> Deref for Strategy<T, E> {
+impl<T: ?Sized, E> Deref for Strategy<T, E> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -116,7 +116,7 @@ impl<T, E> Deref for Strategy<T, E> {
     }
 }
 
-impl<T, E> DerefMut for Strategy<T, E> {
+impl<T: ?Sized, E> DerefMut for Strategy<T, E> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }
