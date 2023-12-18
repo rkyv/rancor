@@ -235,21 +235,23 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
 
 /// Helper methods for `Option`s.
 pub trait OptionExt<T> {
-    /// Returns a `Result` with this error type converted to `U`.
+    /// Returns a `Result` with an error indicating that `Some` was expected but
+    /// `None` was found.
     fn into_error<E>(self) -> Result<T, E>
     where
         E: Error;
 
-    /// Returns a `Result` with this error type converted to `U` and with an
-    /// additional `trace` message added.
+    /// Returns a `Result` with an error indicating that `Some` was expected but
+    /// `None` was found, and with an additional `trace` message added.
     fn into_trace<E, R>(self, trace: R) -> Result<T, E>
     where
         E: Error,
         R: fmt::Debug + fmt::Display + Send + Sync + 'static;
 
-    /// Returns a `Result` with this error type converted to `U` and with an
-    /// additional trace message added by evaluating the given function `f`. The
-    /// function is evaluated only if an error occurred.
+    /// Returns a `Result` with an error indicating that `Some` was expected but
+    /// `None` was found, and with an additional trace message added by
+    /// evaluating the given function `f`. The function is evaluated only if an
+    /// error occurred.
     fn into_with_trace<E, R, F>(self, f: F) -> Result<T, E>
     where
         E: Error,
