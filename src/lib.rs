@@ -170,6 +170,14 @@ pub trait ResultExt<T, E> {
         R: fmt::Debug + fmt::Display + Send + Sync + 'static,
         F: FnOnce() -> R,
         E: Trace;
+
+    /// Safely unwraps a result that is always `Ok`.
+    ///
+    /// In order to call this method, the error type of this `Result` must be a
+    /// [`Never`] type.
+    fn always_ok(self) -> T
+    where
+        E: Never;
 }
 
 impl<T, E> ResultExt<T, E> for Result<T, E> {
@@ -231,6 +239,18 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
             Err(e) => Err(e.trace(f())),
         }
     }
+
+    fn always_ok(self) -> T
+    where
+        E: Never,
+    {
+        match self {
+            Ok(x) => x,
+            // SAFETY: Error types that implement `Never` cannot be constructed,
+            // so the variant of this `Result` must be `Ok`.
+            Err(_) => unsafe { unreachable_unchecked() },
+        }
+    }
 }
 
 /// Helper methods for `Option`s.
@@ -258,6 +278,16 @@ pub trait OptionExt<T> {
         R: fmt::Debug + fmt::Display + Send + Sync + 'static,
         F: FnOnce() -> R;
 }
+
+/// A type that can never be produced.
+///
+/// Never types include the unstable `!` type, enums with no variants, or any
+/// type that always contains a never type (e.g. a struct with a `Never` field).
+///
+/// # Safety
+///
+/// It must be impossible to produce a value of this type.
+pub unsafe trait Never {}
 
 #[derive(Debug)]
 struct NoneError;
@@ -308,6 +338,9 @@ impl<T> OptionExt<T> for Option<T> {
 
 pub use core::convert::Infallible;
 
+// SAFETY: `Infallible` is an enum with no variants, and so cannot be produced.
+unsafe impl Never for Infallible {}
+
 impl Trace for Infallible {
     fn trace<R>(self, _: R) -> Self
     where
@@ -324,6 +357,9 @@ impl Trace for Infallible {
 /// An error type that does not occupy any space, panicking on creation instead.
 #[derive(Debug)]
 pub enum Panic {}
+
+// SAFETY: `Panic` is an enum with no variants, and so cannot be produced.
+unsafe impl Never for Panic {}
 
 impl fmt::Display for Panic {
     fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
