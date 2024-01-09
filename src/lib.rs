@@ -30,6 +30,7 @@ mod thin_box;
 
 use core::{
     fmt,
+    hint::unreachable_unchecked,
     marker::PhantomData,
     ops::{Deref, DerefMut},
 };
@@ -245,9 +246,9 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
     {
         match self {
             Ok(x) => x,
-            // Error types that implement `Never` cannot be constructed,
+            // SAFETY: Error types that implement `Never` cannot be constructed,
             // so the variant of this `Result` must be `Ok`.
-            Err(e) => e.never(),
+            Err(_) => unsafe { unreachable_unchecked() },
         }
     }
 }
@@ -286,10 +287,7 @@ pub trait OptionExt<T> {
 /// # Safety
 ///
 /// It must be impossible to produce a value of this type.
-pub unsafe trait Never {
-    /// Coerces this type into the never type, `!`.
-    fn never(self) -> !;
-}
+pub unsafe trait Never {}
 
 #[derive(Debug)]
 struct NoneError;
@@ -341,19 +339,13 @@ impl<T> OptionExt<T> for Option<T> {
 pub use core::convert::Infallible;
 
 // SAFETY: `Infallible` is an enum with no variants, and so cannot be produced.
-unsafe impl Never for Infallible {
-    fn never(self) -> ! {
-        match self {}
-    }
-}
+unsafe impl Never for Infallible {}
 
 impl Trace for Infallible {
     fn trace<R>(self, _: R) -> Self
     where
         R: fmt::Debug + fmt::Display + Send + Sync + 'static,
     {
-        // `Infallible` is an enum with no variants, and so can never be
-        // constructed as the `self` parameter.
         match self {}
     }
 }
@@ -363,16 +355,10 @@ impl Trace for Infallible {
 pub enum Panic {}
 
 // SAFETY: `Panic` is an enum with no variants, and so cannot be produced.
-unsafe impl Never for Panic {
-    fn never(self) -> ! {
-        match self {}
-    }
-}
+unsafe impl Never for Panic {}
 
 impl fmt::Display for Panic {
     fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // `Panic` is an enum with no variants, and so can never be
-        // constructed as the `self` parameter.
         match *self {}
     }
 }
@@ -385,8 +371,6 @@ impl Trace for Panic {
     where
         R: fmt::Debug + fmt::Display + Send + Sync + 'static,
     {
-        // `Panic` is an enum with no variants, and so can never be
-        // constructed as the `self` parameter.
         match self {}
     }
 }
