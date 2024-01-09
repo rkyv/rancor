@@ -287,7 +287,9 @@ pub trait OptionExt<T> {
 /// It must be impossible to produce a value of this type.
 pub unsafe trait Never {}
 
+/// Consumes a `Never` type, returning a primitive `!`.
 ///
+/// This is a safe version of [`unreachable_unchecked`] for `Never` types.
 #[inline(always)]
 pub const fn unreachable_checked<T: Never>(_: T) -> ! {
     // SAFETY: Types that implement `Never` cannot be constructed,
