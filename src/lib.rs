@@ -246,9 +246,7 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
     {
         match self {
             Ok(x) => x,
-            // SAFETY: Error types that implement `Never` cannot be constructed,
-            // so the variant of this `Result` must be `Ok`.
-            Err(_) => unsafe { unreachable_unchecked() },
+            Err(e) => unreachable_checked(e),
         }
     }
 }
@@ -288,6 +286,14 @@ pub trait OptionExt<T> {
 ///
 /// It must be impossible to produce a value of this type.
 pub unsafe trait Never {}
+
+///
+#[inline(always)]
+pub const fn unreachable_checked<T: Never>(_: T) -> ! {
+    // SAFETY: Types that implement `Never` cannot be constructed,
+    // so this is unreachable.
+    unsafe { unreachable_unchecked() }
+}
 
 #[derive(Debug)]
 struct NoneError;
