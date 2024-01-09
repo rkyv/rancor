@@ -346,11 +346,7 @@ impl Trace for Infallible {
     where
         R: fmt::Debug + fmt::Display + Send + Sync + 'static,
     {
-        // SAFETY: `Infallible` is an enum with no variants, and so can never be
-        // constructed as the `self` parameter.
-        unsafe {
-            unreachable_unchecked();
-        }
+        match self {}
     }
 }
 
@@ -363,11 +359,7 @@ unsafe impl Never for Panic {}
 
 impl fmt::Display for Panic {
     fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // SAFETY: `Panic` is an enum with no variants, and so can never be
-        // constructed as the `self` parameter.
-        unsafe {
-            unreachable_unchecked();
-        }
+        match *self {}
     }
 }
 
@@ -379,11 +371,7 @@ impl Trace for Panic {
     where
         R: fmt::Debug + fmt::Display + Send + Sync + 'static,
     {
-        // SAFETY: `Panic` is an enum with no variants, and so can never be
-        // constructed as the `self` parameter.
-        unsafe {
-            unreachable_unchecked();
-        }
+        match self {}
     }
 }
 
