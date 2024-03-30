@@ -4,14 +4,14 @@ description = "Scalable and efficient error handling without type composition"
 documentation = "https://docs.rs/rancor"
 keywords = ["error", "error-handling"]
 categories = ["rust-patterns", "no-std"]
-version = "0.1.0-pre8"
+version = "0.1.0-alpha.9"
 edition = "2021"
 authors = ["David Koloski <djkoloski@gmail.com>"]
 license = "MIT"
 repository = "https://github.com/rkyv/rancor"
 
 [dependencies]
-ptr_meta = { version = "0.3.0-pre1", default-features = false }
+ptr_meta = { version = "0.3.0-alpha.2", default-features = false }
 
 [features]
 default = ["std"]
