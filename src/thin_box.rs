@@ -1,3 +1,5 @@
+#[cfg(not(feature = "std"))]
+use alloc::alloc;
 use core::{
     alloc::Layout,
     fmt,
@@ -6,9 +8,6 @@ use core::{
     ops::{Deref, DerefMut},
     ptr::NonNull,
 };
-
-#[cfg(not(feature = "std"))]
-use alloc::alloc;
 #[cfg(feature = "std")]
 use std::alloc;
 
@@ -155,9 +154,9 @@ impl<T: Pointee + ?Sized> DerefMut for ThinBox<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::ThinBox;
-
     use ptr_meta::pointee;
+
+    use super::ThinBox;
 
     #[pointee]
     trait DynTrait {

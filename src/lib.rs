@@ -34,7 +34,6 @@ use core::{
     marker::PhantomData,
     ops::{Deref, DerefMut},
 };
-
 #[cfg(feature = "std")]
 use std::error::Error as StdError;
 
@@ -396,7 +395,7 @@ pub struct Failure;
 
 impl fmt::Display for Failure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "failed to check bytes")
+        write!(f, "failed without error information")
     }
 }
 
@@ -420,3 +419,58 @@ impl Error for Failure {
 
 #[cfg(feature = "alloc")]
 pub use boxed_error::BoxedError;
+
+#[cfg(all(debug_assertions, feature = "alloc"))]
+type DefaultErrorType = BoxedError;
+#[cfg(not(all(debug_assertions, feature = "alloc")))]
+type DefaultErrorType = Failure;
+
+/// A good general-purpose default error type.
+///
+/// If `debug_assertions` and the `alloc` feature are enabled, then this error
+/// will have the same behavior as [`BoxedError`]. Otherwise, it will behave
+/// like [`Failure`].
+#[derive(Debug)]
+pub struct DefaultError {
+    inner: DefaultErrorType,
+}
+
+impl fmt::Display for DefaultError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.inner)?;
+        #[cfg(not(all(debug_assertions, feature = "alloc")))]
+        write!(
+            f,
+            "; enable debug assertions and the `alloc` feature in rancor for \
+             error information"
+        )?;
+
+        Ok(())
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for DefaultError {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        self.inner.source()
+    }
+}
+
+impl Trace for DefaultError {
+    fn trace<R>(self, trace: R) -> Self
+    where
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+    {
+        Self {
+            inner: self.inner.trace(trace),
+        }
+    }
+}
+
+impl Error for DefaultError {
+    fn new<T: StdError + Send + Sync + 'static>(source: T) -> Self {
+        Self {
+            inner: DefaultErrorType::new(source),
+        }
+    }
+}
