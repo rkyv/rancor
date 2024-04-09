@@ -359,7 +359,7 @@ impl Trace for Infallible {
 }
 
 /// An error type that does not occupy any space, panicking on creation instead.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Panic {}
 
 // SAFETY: `Panic` is an enum with no variants, and so cannot be produced.
@@ -391,7 +391,7 @@ impl Error for Panic {
 
 /// An error type that only preserves success or failure, throwing away any more
 /// detailed error messages.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Failure;
 
 impl fmt::Display for Failure {
