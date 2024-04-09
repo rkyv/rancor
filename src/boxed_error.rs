@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::{thin_box::ThinBox, Error, StdError, Trace};
+use crate::{thin_box::ThinBox, Source, StdError, Trace};
 
 #[ptr_meta::pointee]
 trait ErrorTrace: fmt::Debug + fmt::Display + Send + Sync + 'static {}
@@ -67,7 +67,7 @@ impl Trace for BoxedError {
     }
 }
 
-impl Error for BoxedError {
+impl Source for BoxedError {
     fn new<T: StdError + Send + Sync + 'static>(source: T) -> Self {
         Self {
             // SAFETY: The provided closure returns the same pointer unsized to

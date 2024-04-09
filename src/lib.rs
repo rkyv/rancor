@@ -67,7 +67,7 @@ pub trait Trace: Sized + Send + Sync + 'static {
 
 /// An error type which can be uniformly constructed from a [`StdError`] and
 /// additional trace information.
-pub trait Error: Trace + StdError {
+pub trait Source: Trace + StdError {
     /// Returns a new `Self` using the given [`Error`].
     ///
     /// Depending on the specific implementation, this may box the error,
@@ -125,7 +125,7 @@ impl<T: ?Sized, E> DerefMut for Strategy<T, E> {
 #[macro_export]
 macro_rules! fail {
     ($($x:tt)*) => {
-        return ::core::result::Result::Err($crate::Error::new($($x)*))
+        return ::core::result::Result::Err($crate::Source::new($($x)*))
     };
 }
 
@@ -134,14 +134,14 @@ pub trait ResultExt<T, E> {
     /// Returns a `Result` with this error type converted to `U`.
     fn into_error<U>(self) -> Result<T, U>
     where
-        U: Error,
+        U: Source,
         E: StdError + Send + Sync + 'static;
 
     /// Returns a `Result` with this error type converted to `U` and with an
     /// additional `trace` message added.
     fn into_trace<U, R>(self, trace: R) -> Result<T, U>
     where
-        U: Error,
+        U: Source,
         R: fmt::Debug + fmt::Display + Send + Sync + 'static,
         E: StdError + Send + Sync + 'static;
 
@@ -150,7 +150,7 @@ pub trait ResultExt<T, E> {
     /// function is evaluated only if an error occurred.
     fn into_with_trace<U, R, F>(self, f: F) -> Result<T, U>
     where
-        U: Error,
+        U: Source,
         R: fmt::Debug + fmt::Display + Send + Sync + 'static,
         F: FnOnce() -> R,
         E: StdError + Send + Sync + 'static;
@@ -182,7 +182,7 @@ pub trait ResultExt<T, E> {
 impl<T, E> ResultExt<T, E> for Result<T, E> {
     fn into_error<U>(self) -> Result<T, U>
     where
-        U: Error,
+        U: Source,
         E: StdError + Send + Sync + 'static,
     {
         match self {
@@ -193,7 +193,7 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
 
     fn into_trace<U, R>(self, trace: R) -> Result<T, U>
     where
-        U: Error,
+        U: Source,
         R: fmt::Debug + fmt::Display + Send + Sync + 'static,
         E: StdError + Send + Sync + 'static,
     {
@@ -205,7 +205,7 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
 
     fn into_with_trace<U, R, F>(self, f: F) -> Result<T, U>
     where
-        U: Error,
+        U: Source,
         R: fmt::Debug + fmt::Display + Send + Sync + 'static,
         F: FnOnce() -> R,
         E: StdError + Send + Sync + 'static,
@@ -256,13 +256,13 @@ pub trait OptionExt<T> {
     /// `None` was found.
     fn into_error<E>(self) -> Result<T, E>
     where
-        E: Error;
+        E: Source;
 
     /// Returns a `Result` with an error indicating that `Some` was expected but
     /// `None` was found, and with an additional `trace` message added.
     fn into_trace<E, R>(self, trace: R) -> Result<T, E>
     where
-        E: Error,
+        E: Source,
         R: fmt::Debug + fmt::Display + Send + Sync + 'static;
 
     /// Returns a `Result` with an error indicating that `Some` was expected but
@@ -271,7 +271,7 @@ pub trait OptionExt<T> {
     /// error occurred.
     fn into_with_trace<E, R, F>(self, f: F) -> Result<T, E>
     where
-        E: Error,
+        E: Source,
         R: fmt::Debug + fmt::Display + Send + Sync + 'static,
         F: FnOnce() -> R;
 }
@@ -311,7 +311,7 @@ impl std::error::Error for NoneError {}
 impl<T> OptionExt<T> for Option<T> {
     fn into_error<E>(self) -> Result<T, E>
     where
-        E: Error,
+        E: Source,
     {
         match self {
             Some(x) => Ok(x),
@@ -321,7 +321,7 @@ impl<T> OptionExt<T> for Option<T> {
 
     fn into_trace<E, R>(self, trace: R) -> Result<T, E>
     where
-        E: Error,
+        E: Source,
         R: fmt::Debug + fmt::Display + Send + Sync + 'static,
     {
         match self {
@@ -332,7 +332,7 @@ impl<T> OptionExt<T> for Option<T> {
 
     fn into_with_trace<E, R, F>(self, f: F) -> Result<T, E>
     where
-        E: Error,
+        E: Source,
         R: fmt::Debug + fmt::Display + Send + Sync + 'static,
         F: FnOnce() -> R,
     {
@@ -382,7 +382,7 @@ impl Trace for Panic {
     }
 }
 
-impl Error for Panic {
+impl Source for Panic {
     fn new<T: fmt::Display>(error: T) -> Self {
         panic!("created a new `Panic` from: {error}");
     }
@@ -411,7 +411,7 @@ impl Trace for Failure {
     }
 }
 
-impl Error for Failure {
+impl Source for Failure {
     fn new<T: StdError + Send + Sync + 'static>(_: T) -> Self {
         Self
     }
@@ -421,21 +421,21 @@ impl Error for Failure {
 pub use boxed_error::BoxedError;
 
 #[cfg(all(debug_assertions, feature = "alloc"))]
-type DefaultErrorType = BoxedError;
+type ErrorType = BoxedError;
 #[cfg(not(all(debug_assertions, feature = "alloc")))]
-type DefaultErrorType = Failure;
+type ErrorType = Failure;
 
-/// A good general-purpose default error type.
+/// A good general-purpose error type.
 ///
 /// If `debug_assertions` and the `alloc` feature are enabled, then this error
 /// will have the same behavior as [`BoxedError`]. Otherwise, it will behave
 /// like [`Failure`].
 #[derive(Debug)]
-pub struct DefaultError {
-    inner: DefaultErrorType,
+pub struct Error {
+    inner: ErrorType,
 }
 
-impl fmt::Display for DefaultError {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.inner)?;
         #[cfg(not(all(debug_assertions, feature = "alloc")))]
@@ -450,13 +450,13 @@ impl fmt::Display for DefaultError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for DefaultError {
+impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         self.inner.source()
     }
 }
 
-impl Trace for DefaultError {
+impl Trace for Error {
     fn trace<R>(self, trace: R) -> Self
     where
         R: fmt::Debug + fmt::Display + Send + Sync + 'static,
@@ -467,10 +467,10 @@ impl Trace for DefaultError {
     }
 }
 
-impl Error for DefaultError {
+impl Source for Error {
     fn new<T: StdError + Send + Sync + 'static>(source: T) -> Self {
         Self {
-            inner: DefaultErrorType::new(source),
+            inner: ErrorType::new(source),
         }
     }
 }
