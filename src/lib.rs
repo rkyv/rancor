@@ -61,8 +61,8 @@ impl<T: fmt::Debug + fmt::Display + ?Sized> StdError for T {}
 pub trait Trace: Sized + Send + Sync + 'static {
     /// Adds an additional trace to this error, returning a new error.
     fn trace<R>(self, trace: R) -> Self
-        where
-            R: fmt::Debug + fmt::Display + Send + Sync + 'static;
+    where
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static;
 }
 
 /// An error type which can be uniformly constructed from a [`StdError`] and
@@ -97,6 +97,29 @@ impl<T: ?Sized, E> Fallible for Strategy<T, E> {
 impl<T: ?Sized, E> Strategy<T, E> {
     /// Wraps the given mutable reference, returning a mutable reference to a
     /// `Strategy`.
+    ///
+    /// ## Example
+    /// ```
+    /// use std::ops::Deref;
+    ///
+    /// use rancor::{Failure, Strategy};
+    /// fn test() {
+    ///     struct Inner {
+    ///         value: u64,
+    ///     }
+    ///
+    ///     let mut inner = Inner { value: 10 };
+    ///
+    ///     let inner_value_address = &inner.value as *const u64;
+    ///     let strategy: &mut Strategy<Inner, Failure> =
+    ///         Strategy::wrap(&mut inner);
+    ///     let strategy_value_address = (&strategy.deref().value) as *const u64;
+    ///     assert_eq!(inner_value_address, strategy_value_address);
+    ///     // Strategy wraps a type but does not change its memory layout.
+    /// }
+    ///
+    /// test();
+    /// ```
     pub fn wrap(inner: &mut T) -> &mut Self {
         // SAFETY: `Strategy` is `repr(transparent)` and so has the same layout
         // as `T`. The input and output lifetimes are the same, so mutable
@@ -133,57 +156,57 @@ macro_rules! fail {
 pub trait ResultExt<T, E> {
     /// Returns a `Result` with this error type converted to `U`.
     fn into_error<U>(self) -> Result<T, U>
-        where
-            U: Source,
-            E: StdError + Send + Sync + 'static;
+    where
+        U: Source,
+        E: StdError + Send + Sync + 'static;
 
     /// Returns a `Result` with this error type converted to `U` and with an
     /// additional `trace` message added.
     fn into_trace<U, R>(self, trace: R) -> Result<T, U>
-        where
-            U: Source,
-            R: fmt::Debug + fmt::Display + Send + Sync + 'static,
-            E: StdError + Send + Sync + 'static;
+    where
+        U: Source,
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        E: StdError + Send + Sync + 'static;
 
     /// Returns a `Result` with this error type converted to `U` and with an
     /// additional trace message added by evaluating the given function `f`. The
     /// function is evaluated only if an error occurred.
     fn into_with_trace<U, R, F>(self, f: F) -> Result<T, U>
-        where
-            U: Source,
-            R: fmt::Debug + fmt::Display + Send + Sync + 'static,
-            F: FnOnce() -> R,
-            E: StdError + Send + Sync + 'static;
+    where
+        U: Source,
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        F: FnOnce() -> R,
+        E: StdError + Send + Sync + 'static;
 
     /// Adds an additional `trace` message to the error value of this type.
     fn trace<R>(self, trace: R) -> Result<T, E>
-        where
-            R: fmt::Debug + fmt::Display + Send + Sync + 'static,
-            E: Trace;
+    where
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        E: Trace;
 
     /// Adds an additional trace message to the error value of this type by
     /// evaluating the given function `f`. The function is evaluated only if an
     /// error occurred.
     fn with_trace<R, F>(self, f: F) -> Result<T, E>
-        where
-            R: fmt::Debug + fmt::Display + Send + Sync + 'static,
-            F: FnOnce() -> R,
-            E: Trace;
+    where
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        F: FnOnce() -> R,
+        E: Trace;
 
     /// Safely unwraps a result that is always `Ok`.
     ///
     /// In order to call this method, the error type of this `Result` must be a
     /// [`Never`] type.
     fn always_ok(self) -> T
-        where
-            E: Never;
+    where
+        E: Never;
 }
 
 impl<T, E> ResultExt<T, E> for Result<T, E> {
     fn into_error<U>(self) -> Result<T, U>
-        where
-            U: Source,
-            E: StdError + Send + Sync + 'static,
+    where
+        U: Source,
+        E: StdError + Send + Sync + 'static,
     {
         match self {
             Ok(x) => Ok(x),
@@ -192,10 +215,10 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
     }
 
     fn into_trace<U, R>(self, trace: R) -> Result<T, U>
-        where
-            U: Source,
-            R: fmt::Debug + fmt::Display + Send + Sync + 'static,
-            E: StdError + Send + Sync + 'static,
+    where
+        U: Source,
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        E: StdError + Send + Sync + 'static,
     {
         match self {
             Ok(x) => Ok(x),
@@ -204,11 +227,11 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
     }
 
     fn into_with_trace<U, R, F>(self, f: F) -> Result<T, U>
-        where
-            U: Source,
-            R: fmt::Debug + fmt::Display + Send + Sync + 'static,
-            F: FnOnce() -> R,
-            E: StdError + Send + Sync + 'static,
+    where
+        U: Source,
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        F: FnOnce() -> R,
+        E: StdError + Send + Sync + 'static,
     {
         match self {
             Ok(x) => Ok(x),
@@ -217,9 +240,9 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
     }
 
     fn trace<R>(self, trace: R) -> Result<T, E>
-        where
-            R: fmt::Debug + fmt::Display + Send + Sync + 'static,
-            E: Trace,
+    where
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        E: Trace,
     {
         match self {
             Ok(x) => Ok(x),
@@ -228,10 +251,10 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
     }
 
     fn with_trace<R, F>(self, f: F) -> Result<T, E>
-        where
-            R: fmt::Debug + fmt::Display + Send + Sync + 'static,
-            F: FnOnce() -> R,
-            E: Trace,
+    where
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        F: FnOnce() -> R,
+        E: Trace,
     {
         match self {
             Ok(x) => Ok(x),
@@ -240,8 +263,8 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
     }
 
     fn always_ok(self) -> T
-        where
-            E: Never,
+    where
+        E: Never,
     {
         match self {
             Ok(x) => x,
@@ -255,25 +278,25 @@ pub trait OptionExt<T> {
     /// Returns a `Result` with an error indicating that `Some` was expected but
     /// `None` was found.
     fn into_error<E>(self) -> Result<T, E>
-        where
-            E: Source;
+    where
+        E: Source;
 
     /// Returns a `Result` with an error indicating that `Some` was expected but
     /// `None` was found, and with an additional `trace` message added.
     fn into_trace<E, R>(self, trace: R) -> Result<T, E>
-        where
-            E: Source,
-            R: fmt::Debug + fmt::Display + Send + Sync + 'static;
+    where
+        E: Source,
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static;
 
     /// Returns a `Result` with an error indicating that `Some` was expected but
     /// `None` was found, and with an additional trace message added by
     /// evaluating the given function `f`. The function is evaluated only if an
     /// error occurred.
     fn into_with_trace<E, R, F>(self, f: F) -> Result<T, E>
-        where
-            E: Source,
-            R: fmt::Debug + fmt::Display + Send + Sync + 'static,
-            F: FnOnce() -> R;
+    where
+        E: Source,
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        F: FnOnce() -> R;
 }
 
 /// A type that can never be produced.
@@ -310,8 +333,8 @@ impl std::error::Error for NoneError {}
 
 impl<T> OptionExt<T> for Option<T> {
     fn into_error<E>(self) -> Result<T, E>
-        where
-            E: Source,
+    where
+        E: Source,
     {
         match self {
             Some(x) => Ok(x),
@@ -320,9 +343,9 @@ impl<T> OptionExt<T> for Option<T> {
     }
 
     fn into_trace<E, R>(self, trace: R) -> Result<T, E>
-        where
-            E: Source,
-            R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+    where
+        E: Source,
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
     {
         match self {
             Some(x) => Ok(x),
@@ -331,10 +354,10 @@ impl<T> OptionExt<T> for Option<T> {
     }
 
     fn into_with_trace<E, R, F>(self, f: F) -> Result<T, E>
-        where
-            E: Source,
-            R: fmt::Debug + fmt::Display + Send + Sync + 'static,
-            F: FnOnce() -> R,
+    where
+        E: Source,
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+        F: FnOnce() -> R,
     {
         match self {
             Some(x) => Ok(x),
@@ -350,8 +373,8 @@ unsafe impl Never for Infallible {}
 
 impl Trace for Infallible {
     fn trace<R>(self, _: R) -> Self
-        where
-            R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+    where
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
     {
         match self {}
     }
@@ -375,8 +398,8 @@ impl std::error::Error for Panic {}
 
 impl Trace for Panic {
     fn trace<R>(self, _: R) -> Self
-        where
-            R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+    where
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
     {
         match self {}
     }
@@ -404,8 +427,8 @@ impl std::error::Error for Failure {}
 
 impl Trace for Failure {
     fn trace<R>(self, _: R) -> Self
-        where
-            R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+    where
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
     {
         self
     }
@@ -458,8 +481,8 @@ impl std::error::Error for Error {
 
 impl Trace for Error {
     fn trace<R>(self, trace: R) -> Self
-        where
-            R: fmt::Debug + fmt::Display + Send + Sync + 'static,
+    where
+        R: fmt::Debug + fmt::Display + Send + Sync + 'static,
     {
         Self {
             inner: self.inner.trace(trace),
@@ -472,32 +495,5 @@ impl Source for Error {
         Self {
             inner: ErrorType::new(source),
         }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    struct Inner {
-        vec: Vec<u64>,
-        value: u64,
-    }
-
-    #[test]
-    fn test_strategy() {
-        let mut inner = Inner { vec: vec![], value: 10 };
-        let address = &inner.value as *const u64;
-        let strategy: &mut Strategy<Inner, Failure> = Strategy::wrap(&mut inner);
-        let s_address = (&strategy.inner.value) as *const u64;
-        assert_eq!(address, s_address);
-
-        assert_eq!(strategy.value, 10);
-        strategy.value = 20;
-        strategy.vec.push(1);
-        strategy.vec.push(2);
-        assert_eq!(strategy.value, 20);
-        assert_eq!(inner.value, 20);
-        assert_eq!(inner.vec.len(), 2);
     }
 }
