@@ -154,11 +154,9 @@ impl<T: Pointee + ?Sized> DerefMut for ThinBox<T> {
 
 #[cfg(test)]
 mod tests {
-    use ptr_meta::pointee;
-
     use super::ThinBox;
 
-    #[pointee]
+    #[ptr_meta::pointee]
     trait DynTrait {
         fn int(&self) -> i32;
     }

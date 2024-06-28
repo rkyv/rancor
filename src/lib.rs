@@ -97,6 +97,29 @@ impl<T: ?Sized, E> Fallible for Strategy<T, E> {
 impl<T: ?Sized, E> Strategy<T, E> {
     /// Wraps the given mutable reference, returning a mutable reference to a
     /// `Strategy`.
+    ///
+    /// ## Example
+    /// ```
+    /// use std::ops::Deref;
+    ///
+    /// use rancor::{Failure, Strategy};
+    /// fn test() {
+    ///     struct Inner {
+    ///         value: u64,
+    ///     }
+    ///
+    ///     let mut inner = Inner { value: 10 };
+    ///
+    ///     let inner_value_address = &inner.value as *const u64;
+    ///     let strategy: &mut Strategy<Inner, Failure> =
+    ///         Strategy::wrap(&mut inner);
+    ///     let strategy_value_address = (&strategy.deref().value) as *const u64;
+    ///     assert_eq!(inner_value_address, strategy_value_address);
+    ///     // Strategy wraps a type but does not change its memory layout.
+    /// }
+    ///
+    /// test();
+    /// ```
     pub fn wrap(inner: &mut T) -> &mut Self {
         // SAFETY: `Strategy` is `repr(transparent)` and so has the same layout
         // as `T`. The input and output lifetimes are the same, so mutable
@@ -125,7 +148,7 @@ impl<T: ?Sized, E> DerefMut for Strategy<T, E> {
 #[macro_export]
 macro_rules! fail {
     ($($x:tt)*) => {
-        return ::core::result::Result::Err($crate::Source::new($($x)*))
+        return ::core::result::Result::Err($crate::Source::new($($x)*));
     };
 }
 
