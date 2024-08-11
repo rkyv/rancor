@@ -7,6 +7,11 @@
 //! - Functions may error, but succeed most of the time
 //! - Errors should provide as much useful detail as possible when emitted
 //! - Use cases include both `no_std` and targets with support for `std`
+//!
+//! ## Features
+//!
+//! - `alloc`: Provides the [`BoxedError`] type. Enabled by default.
+//! - `std`: Uses the [`Error`](std::error::Error) trait. Enabled by default.
 
 #![deny(
     future_incompatible,
@@ -22,6 +27,7 @@
     rustdoc::missing_crate_level_docs
 )]
 #![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(all(docsrs, not(doctest)), feature(doc_cfg, doc_auto_cfg))]
 
 #[cfg(feature = "alloc")]
 mod boxed_error;
@@ -35,17 +41,15 @@ use core::{
     ops::{Deref, DerefMut},
 };
 #[cfg(feature = "std")]
-use std::error::Error as StdError;
+pub use std::error::Error as StdError;
 
 #[cfg(not(feature = "std"))]
 /// An error that can be debugged and displayed.
 ///
-/// Without the `std` feature enabled, this has supertraits of
-/// [`core::fmt::Debug`] and [`core::fmt::Display`]. With the `std`
-/// feature enabled, this also has a supertrait of [`std::error::Error`]
+/// With the `std` feature enabled, this is a re-export of the [`Error`] trait
 /// instead.
 ///
-/// This trait is always `Send + Sync + 'static`.
+/// [`Error`]: std::error::Error
 #[cfg_attr(feature = "alloc", ptr_meta::pointee)]
 pub trait StdError: fmt::Debug + fmt::Display {
     /// The lower-level source of this error, if any.
