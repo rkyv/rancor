@@ -110,11 +110,11 @@ impl<T: ?Sized, E> Strategy<T, E> {
     ///
     ///     let mut inner = Inner { value: 10 };
     ///
-    ///     let inner_value_address = &inner.value as *const u64;
+    ///     let inner_value_ptr = &inner.value as *const u64;
     ///     let strategy: &mut Strategy<Inner, Failure> =
     ///         Strategy::wrap(&mut inner);
-    ///     let strategy_value_address = (&strategy.deref().value) as *const u64;
-    ///     assert_eq!(inner_value_address, strategy_value_address);
+    ///     let strategy_value_ptr = (&strategy.deref().value) as *const u64;
+    ///     assert_eq!(inner_value_ptr, strategy_value_ptr);
     ///     // Strategy wraps a type but does not change its memory layout.
     /// }
     ///
@@ -509,9 +509,13 @@ mod test {
 
     #[test]
     fn test_strategy() {
-        let mut inner = Inner { vec: vec![], value: 10 };
+        let mut inner = Inner {
+            vec: vec![],
+            value: 10,
+        };
         let address = &inner.value as *const u64;
-        let strategy: &mut Strategy<Inner, Failure> = Strategy::wrap(&mut inner);
+        let strategy: &mut Strategy<Inner, Failure> =
+            Strategy::wrap(&mut inner);
         let s_address = (&strategy.inner.value) as *const u64;
         assert_eq!(address, s_address);
 

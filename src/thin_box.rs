@@ -90,8 +90,8 @@ impl<T: Pointee + ?Sized> ThinBox<T> {
                 _phantom: PhantomData,
             }
         } else {
+            // SAFETY: We checked that `layout` has non-zero size.
             let raw_ptr =
-                // SAFETY: We checked that `layout` has non-zero size.
                 unsafe { NonNull::new(alloc::alloc(layout)).unwrap() };
             // SAFETY: `layout_for` returns a layout that is aligned for and has
             // space for `value` after the first `header` bytes. Adding `header`
