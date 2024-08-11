@@ -497,3 +497,30 @@ impl Source for Error {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    struct Inner {
+        vec: Vec<u64>,
+        value: u64,
+    }
+
+    #[test]
+    fn test_strategy() {
+        let mut inner = Inner { vec: vec![], value: 10 };
+        let address = &inner.value as *const u64;
+        let strategy: &mut Strategy<Inner, Failure> = Strategy::wrap(&mut inner);
+        let s_address = (&strategy.inner.value) as *const u64;
+        assert_eq!(address, s_address);
+
+        assert_eq!(strategy.value, 10);
+        strategy.value = 20;
+        strategy.vec.push(1);
+        strategy.vec.push(2);
+        assert_eq!(strategy.value, 20);
+        assert_eq!(inner.value, 20);
+        assert_eq!(inner.vec.len(), 2);
+    }
+}
