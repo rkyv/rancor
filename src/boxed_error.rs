@@ -25,7 +25,8 @@ impl fmt::Display for ErrorWithTrace {
     }
 }
 
-impl StdError for ErrorWithTrace {
+#[cfg(feature = "std")]
+impl std::error::Error for ErrorWithTrace {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         self.error.inner.source()
     }

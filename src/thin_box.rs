@@ -1,5 +1,3 @@
-#[cfg(not(feature = "std"))]
-use alloc::alloc;
 use core::{
     alloc::Layout,
     fmt,
@@ -8,10 +6,10 @@ use core::{
     ops::{Deref, DerefMut},
     ptr::NonNull,
 };
-#[cfg(feature = "std")]
-use std::alloc;
 
 use ptr_meta::Pointee;
+
+use crate::alloc::alloc::{alloc, dealloc};
 
 pub struct ThinBox<T: Pointee + ?Sized> {
     ptr: NonNull<()>,
@@ -44,7 +42,7 @@ impl<T: Pointee + ?Sized> Drop for ThinBox<T> {
             // same layout used to allocate the memory because it is from
             // `Self::layout_for` given the layout of the owned value.
             unsafe {
-                alloc::dealloc(ptr.cast::<u8>().sub(header), layout);
+                dealloc(ptr.cast::<u8>().sub(header), layout);
             }
         }
     }
@@ -91,8 +89,7 @@ impl<T: Pointee + ?Sized> ThinBox<T> {
             }
         } else {
             // SAFETY: We checked that `layout` has non-zero size.
-            let raw_ptr =
-                unsafe { NonNull::new(alloc::alloc(layout)).unwrap() };
+            let raw_ptr = unsafe { NonNull::new(alloc(layout)).unwrap() };
             // SAFETY: `layout_for` returns a layout that is aligned for and has
             // space for `value` after the first `header` bytes. Adding `header`
             // bytes to `raw_ptr` will always be in-bounds.
@@ -154,7 +151,10 @@ impl<T: Pointee + ?Sized> DerefMut for ThinBox<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::ThinBox;
+    use crate::{
+        alloc::string::{String, ToString},
+        thin_box::ThinBox,
+    };
 
     #[ptr_meta::pointee]
     trait DynTrait {

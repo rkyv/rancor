@@ -29,6 +29,11 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(all(docsrs, not(doctest)), feature(doc_cfg, doc_auto_cfg))]
 
+#[cfg(all(feature = "alloc", not(feature = "std")))]
+extern crate alloc;
+#[cfg(feature = "std")]
+use std as alloc;
+
 #[cfg(feature = "alloc")]
 mod boxed_error;
 #[cfg(feature = "alloc")]
@@ -50,7 +55,6 @@ pub use std::error::Error as StdError;
 /// instead.
 ///
 /// [`Error`]: std::error::Error
-#[cfg_attr(feature = "alloc", ptr_meta::pointee)]
 pub trait StdError: fmt::Debug + fmt::Display {
     /// The lower-level source of this error, if any.
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
@@ -60,6 +64,33 @@ pub trait StdError: fmt::Debug + fmt::Display {
 
 #[cfg(not(feature = "std"))]
 impl<T: fmt::Debug + fmt::Display + ?Sized> StdError for T {}
+
+#[cfg(not(feature = "std"))]
+// SAFETY: The metadata type of `dyn StdError` is `DynMetadata<dyn StdError>`.
+unsafe impl ptr_meta::Pointee for dyn StdError {
+    type Metadata = ptr_meta::DynMetadata<dyn StdError>;
+}
+
+#[cfg(not(feature = "std"))]
+// SAFETY: The metadata type of `dyn StdError + Send` is
+// `DynMetadata<dyn StdError + Send>`.
+unsafe impl ptr_meta::Pointee for dyn StdError + Send {
+    type Metadata = ptr_meta::DynMetadata<dyn StdError + Send>;
+}
+
+#[cfg(not(feature = "std"))]
+// SAFETY: The metadata type of `dyn StdError + Sync` is
+// `DynMetadata<dyn StdError + Sync>`.
+unsafe impl ptr_meta::Pointee for dyn StdError + Sync {
+    type Metadata = ptr_meta::DynMetadata<dyn StdError + Sync>;
+}
+
+#[cfg(not(feature = "std"))]
+// SAFETY: The metadata type of `dyn StdError + Send + Sync` is
+// `DynMetadata<dyn StdError + Send + Sync>`.
+unsafe impl ptr_meta::Pointee for dyn StdError + Send + Sync {
+    type Metadata = ptr_meta::DynMetadata<dyn StdError + Send + Sync>;
+}
 
 /// A type which can add an additional trace to itself.
 pub trait Trace: Sized + Send + Sync + 'static {
@@ -478,7 +509,7 @@ impl fmt::Display for Error {
 
 #[cfg(feature = "std")]
 impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         self.inner.source()
     }
 }
@@ -507,16 +538,12 @@ mod test {
     use super::*;
 
     struct Inner {
-        vec: Vec<u64>,
         value: u64,
     }
 
     #[test]
     fn test_strategy() {
-        let mut inner = Inner {
-            vec: vec![],
-            value: 10,
-        };
+        let mut inner = Inner { value: 10 };
         let address = &inner.value as *const u64;
         let strategy: &mut Strategy<Inner, Failure> =
             Strategy::wrap(&mut inner);
@@ -525,10 +552,7 @@ mod test {
 
         assert_eq!(strategy.value, 10);
         strategy.value = 20;
-        strategy.vec.push(1);
-        strategy.vec.push(2);
         assert_eq!(strategy.value, 20);
         assert_eq!(inner.value, 20);
-        assert_eq!(inner.vec.len(), 2);
     }
 }
