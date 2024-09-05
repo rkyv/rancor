@@ -1,6 +1,6 @@
-use core::fmt;
+use core::{error, fmt};
 
-use crate::{thin_box::ThinBox, Source, StdError, Trace};
+use crate::{thin_box::ThinBox, Source, Trace};
 
 #[ptr_meta::pointee]
 trait ErrorTrace: fmt::Debug + fmt::Display + Send + Sync + 'static {}
@@ -25,9 +25,8 @@ impl fmt::Display for ErrorWithTrace {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for ErrorWithTrace {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl error::Error for ErrorWithTrace {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         self.error.inner.source()
     }
 }
@@ -36,7 +35,7 @@ impl std::error::Error for ErrorWithTrace {
 /// to fit in a single pointer.
 #[derive(Debug)]
 pub struct BoxedError {
-    inner: ThinBox<dyn StdError + Send + Sync + 'static>,
+    inner: ThinBox<dyn error::Error + Send + Sync + 'static>,
 }
 
 impl fmt::Display for BoxedError {
@@ -45,9 +44,8 @@ impl fmt::Display for BoxedError {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for BoxedError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl error::Error for BoxedError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         self.inner.source()
     }
 }
@@ -69,7 +67,7 @@ impl Trace for BoxedError {
 }
 
 impl Source for BoxedError {
-    fn new<T: StdError + Send + Sync + 'static>(source: T) -> Self {
+    fn new<T: error::Error + Send + Sync + 'static>(source: T) -> Self {
         Self {
             // SAFETY: The provided closure returns the same pointer unsized to
             // a `dyn Error`.

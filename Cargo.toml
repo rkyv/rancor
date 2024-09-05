@@ -4,6 +4,7 @@ description = "Scalable and efficient error handling without type composition"
 version = "0.1.0-rc.1"
 authors = ["David Koloski <djkoloski@gmail.com>"]
 edition = "2021"
+rust-version = "1.81"
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/rkyv/rancor"
@@ -15,9 +16,8 @@ documentation = "https://docs.rs/rancor"
 ptr_meta = { version = "=0.3.0-rc.1", default-features = false, features = ["derive"] }
 
 [features]
-default = ["std"]
+default = ["alloc"]
 alloc = []
-std = ["alloc", "ptr_meta/std"]
 
 [patch.crates-io]
 ptr_meta = { git = "https://github.com/rkyv/ptr_meta" }

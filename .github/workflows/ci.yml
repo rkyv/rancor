@@ -15,15 +15,14 @@ env:
 
 jobs:
   features:
-    name: Features / ${{ matrix.std }} ${{ matrix.derive }}
+    name: Features / ${{ matrix.alloc }} ${{ matrix.derive }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        std:
+        alloc:
           - ''
           - alloc
-          - std
 
     steps:
       - uses: actions/checkout@v4

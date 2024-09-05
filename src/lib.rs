@@ -11,7 +11,6 @@
 //! ## Features
 //!
 //! - `alloc`: Provides the [`BoxedError`] type. Enabled by default.
-//! - `std`: Uses the [`Error`](std::error::Error) trait. Enabled by default.
 
 #![deny(
     future_incompatible,
@@ -26,13 +25,11 @@
     rustdoc::broken_intra_doc_links,
     rustdoc::missing_crate_level_docs
 )]
-#![cfg_attr(not(feature = "std"), no_std)]
+#![no_std]
 #![cfg_attr(all(docsrs, not(doctest)), feature(doc_cfg, doc_auto_cfg))]
 
-#[cfg(all(feature = "alloc", not(feature = "std")))]
+#[cfg(feature = "alloc")]
 extern crate alloc;
-#[cfg(feature = "std")]
-use std as alloc;
 
 #[cfg(feature = "alloc")]
 mod boxed_error;
@@ -40,57 +37,11 @@ mod boxed_error;
 mod thin_box;
 
 use core::{
-    fmt,
+    error, fmt,
     hint::unreachable_unchecked,
     marker::PhantomData,
     ops::{Deref, DerefMut},
 };
-#[cfg(feature = "std")]
-pub use std::error::Error as StdError;
-
-#[cfg(not(feature = "std"))]
-/// An error that can be debugged and displayed.
-///
-/// With the `std` feature enabled, this is a re-export of the [`Error`] trait
-/// instead.
-///
-/// [`Error`]: std::error::Error
-pub trait StdError: fmt::Debug + fmt::Display {
-    /// The lower-level source of this error, if any.
-    fn source(&self) -> Option<&(dyn StdError + 'static)> {
-        None
-    }
-}
-
-#[cfg(not(feature = "std"))]
-impl<T: fmt::Debug + fmt::Display + ?Sized> StdError for T {}
-
-#[cfg(not(feature = "std"))]
-// SAFETY: The metadata type of `dyn StdError` is `DynMetadata<dyn StdError>`.
-unsafe impl ptr_meta::Pointee for dyn StdError {
-    type Metadata = ptr_meta::DynMetadata<dyn StdError>;
-}
-
-#[cfg(not(feature = "std"))]
-// SAFETY: The metadata type of `dyn StdError + Send` is
-// `DynMetadata<dyn StdError + Send>`.
-unsafe impl ptr_meta::Pointee for dyn StdError + Send {
-    type Metadata = ptr_meta::DynMetadata<dyn StdError + Send>;
-}
-
-#[cfg(not(feature = "std"))]
-// SAFETY: The metadata type of `dyn StdError + Sync` is
-// `DynMetadata<dyn StdError + Sync>`.
-unsafe impl ptr_meta::Pointee for dyn StdError + Sync {
-    type Metadata = ptr_meta::DynMetadata<dyn StdError + Sync>;
-}
-
-#[cfg(not(feature = "std"))]
-// SAFETY: The metadata type of `dyn StdError + Send + Sync` is
-// `DynMetadata<dyn StdError + Send + Sync>`.
-unsafe impl ptr_meta::Pointee for dyn StdError + Send + Sync {
-    type Metadata = ptr_meta::DynMetadata<dyn StdError + Send + Sync>;
-}
 
 /// A type which can add an additional trace to itself.
 pub trait Trace: Sized + Send + Sync + 'static {
@@ -100,15 +51,15 @@ pub trait Trace: Sized + Send + Sync + 'static {
         R: fmt::Debug + fmt::Display + Send + Sync + 'static;
 }
 
-/// An error type which can be uniformly constructed from a [`StdError`] and
+/// An error type which can be uniformly constructed from an [`Error`] and
 /// additional trace information.
-pub trait Source: Trace + StdError {
+pub trait Source: Trace + error::Error {
     /// Returns a new `Self` using the given [`Error`].
     ///
     /// Depending on the specific implementation, this may box the error,
     /// immediately emit a diagnostic, or discard it and only remember that some
     /// error occurred.
-    fn new<T: StdError + Send + Sync + 'static>(source: T) -> Self;
+    fn new<T: error::Error + Send + Sync + 'static>(source: T) -> Self;
 }
 
 /// A type with fallible operations that return its associated error type.
@@ -135,7 +86,7 @@ impl<T: ?Sized, E> Strategy<T, E> {
     ///
     /// ## Example
     /// ```
-    /// use std::ops::Deref;
+    /// use core::ops::Deref;
     ///
     /// use rancor::{Failure, Strategy};
     /// fn test() {
@@ -193,7 +144,7 @@ pub trait ResultExt<T, E> {
     fn into_error<U>(self) -> Result<T, U>
     where
         U: Source,
-        E: StdError + Send + Sync + 'static;
+        E: error::Error + Send + Sync + 'static;
 
     /// Returns a `Result` with this error type converted to `U` and with an
     /// additional `trace` message added.
@@ -201,7 +152,7 @@ pub trait ResultExt<T, E> {
     where
         U: Source,
         R: fmt::Debug + fmt::Display + Send + Sync + 'static,
-        E: StdError + Send + Sync + 'static;
+        E: error::Error + Send + Sync + 'static;
 
     /// Returns a `Result` with this error type converted to `U` and with an
     /// additional trace message added by evaluating the given function `f`. The
@@ -211,7 +162,7 @@ pub trait ResultExt<T, E> {
         U: Source,
         R: fmt::Debug + fmt::Display + Send + Sync + 'static,
         F: FnOnce() -> R,
-        E: StdError + Send + Sync + 'static;
+        E: error::Error + Send + Sync + 'static;
 
     /// Adds an additional `trace` message to the error value of this type.
     fn trace<R>(self, trace: R) -> Result<T, E>
@@ -241,7 +192,7 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
     fn into_error<U>(self) -> Result<T, U>
     where
         U: Source,
-        E: StdError + Send + Sync + 'static,
+        E: error::Error + Send + Sync + 'static,
     {
         match self {
             Ok(x) => Ok(x),
@@ -253,7 +204,7 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
     where
         U: Source,
         R: fmt::Debug + fmt::Display + Send + Sync + 'static,
-        E: StdError + Send + Sync + 'static,
+        E: error::Error + Send + Sync + 'static,
     {
         match self {
             Ok(x) => Ok(x),
@@ -266,7 +217,7 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
         U: Source,
         R: fmt::Debug + fmt::Display + Send + Sync + 'static,
         F: FnOnce() -> R,
-        E: StdError + Send + Sync + 'static,
+        E: error::Error + Send + Sync + 'static,
     {
         match self {
             Ok(x) => Ok(x),
@@ -363,8 +314,7 @@ impl fmt::Display for NoneError {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for NoneError {}
+impl error::Error for NoneError {}
 
 impl<T> OptionExt<T> for Option<T> {
     fn into_error<E>(self) -> Result<T, E>
@@ -428,8 +378,7 @@ impl fmt::Display for Panic {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for Panic {}
+impl error::Error for Panic {}
 
 impl Trace for Panic {
     fn trace<R>(self, _: R) -> Self
@@ -457,8 +406,7 @@ impl fmt::Display for Failure {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for Failure {}
+impl error::Error for Failure {}
 
 impl Trace for Failure {
     fn trace<R>(self, _: R) -> Self
@@ -470,7 +418,7 @@ impl Trace for Failure {
 }
 
 impl Source for Failure {
-    fn new<T: StdError + Send + Sync + 'static>(_: T) -> Self {
+    fn new<T: error::Error + Send + Sync + 'static>(_: T) -> Self {
         Self
     }
 }
@@ -507,9 +455,8 @@ impl fmt::Display for Error {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         self.inner.source()
     }
 }
@@ -526,7 +473,7 @@ impl Trace for Error {
 }
 
 impl Source for Error {
-    fn new<T: StdError + Send + Sync + 'static>(source: T) -> Self {
+    fn new<T: error::Error + Send + Sync + 'static>(source: T) -> Self {
         Self {
             inner: ErrorType::new(source),
         }
