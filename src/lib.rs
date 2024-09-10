@@ -43,7 +43,30 @@ use core::{
     ops::{Deref, DerefMut},
 };
 
-/// A type which can add an additional trace to itself.
+/// An error type which can add additional "trace" information to itself.
+///
+/// Some functions only add additional context to errors created by other
+/// functions, rather than creating errors themselves. With generics, it's
+/// therefore possible to have a generic function which can produce errors with
+/// some type arguments but not with others. In these cases, `Trace` allows
+/// those functions to add context if an error can occur, and compile out the
+/// context if the error type is [`Infallible`] or [`Panic`].
+///
+/// # Example
+///
+/// ```
+/// use rancor::{ResultExt, Trace};
+///
+/// trait Print<E> {
+///     fn print(&self, message: &str) -> Result<(), E>;
+/// }
+///
+/// fn print_hello_world<T: Print<E>, E: Trace>(printer: &T) -> Result<(), E> {
+///     printer.print("hello").trace("failed to print hello")?;
+///     printer.print("world").trace("failed to print world")?;
+///     Ok(())
+/// }
+/// ```
 pub trait Trace: Sized + Send + Sync + 'static {
     /// Adds an additional trace to this error, returning a new error.
     fn trace<R>(self, trace: R) -> Self
@@ -53,6 +76,32 @@ pub trait Trace: Sized + Send + Sync + 'static {
 
 /// An error type which can be uniformly constructed from an [`Error`] and
 /// additional trace information.
+///
+/// # Example
+///
+/// ```
+/// use core::{error::Error, fmt};
+///
+/// use rancor::{fail, Source};
+///
+/// #[derive(Debug)]
+/// struct DivideByZeroError;
+///
+/// impl fmt::Display for DivideByZeroError {
+///     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+///         write!(f, "attempted to divide by zero")
+///     }
+/// }
+///
+/// impl Error for DivideByZeroError {}
+///
+/// fn try_divide<E: Source>(a: i32, b: i32) -> Result<i32, E> {
+///     if b == 0 {
+///         fail!(DivideByZeroError);
+///     }
+///     Ok(a / b)
+/// }
+/// ```
 pub trait Source: Trace + error::Error {
     /// Returns a new `Self` using the given [`Error`].
     ///
@@ -63,6 +112,45 @@ pub trait Source: Trace + error::Error {
 }
 
 /// A type with fallible operations that return its associated error type.
+///
+/// `Fallible` turns an error type parameter into an associated type of another
+/// parameter. You can equip an existing type with a `Fallible` implementation
+/// by wrapping it in a [`Strategy`].
+///
+/// # Example
+///
+/// ```
+/// use rancor::{Failure, Fallible, Strategy};
+///
+/// trait Operator<E = <Self as Fallible>::Error> {
+///     fn operate(&self, lhs: i32, rhs: i32) -> Result<i32, E>;
+/// }
+///
+/// impl<T: Operator<E> + ?Sized, E> Operator<E> for Strategy<T, E> {
+///     fn operate(&self, lhs: i32, rhs: i32) -> Result<i32, E> {
+///         T::operate(self, lhs, rhs)
+///     }
+/// }
+///
+/// struct Add;
+///
+/// impl<E> Operator<E> for Add {
+///     fn operate(&self, lhs: i32, rhs: i32) -> Result<i32, E> {
+///         Ok(lhs + rhs)
+///     }
+/// }
+///
+/// fn operate_one_one<T: Operator + Fallible>(
+///     operator: &T,
+/// ) -> Result<i32, T::Error> {
+///     operator.operate(1, 1)
+/// }
+///
+/// assert_eq!(
+///     operate_one_one(Strategy::<_, Failure>::wrap(&mut Add)),
+///     Ok(2)
+/// );
+/// ```
 pub trait Fallible {
     /// The error type associated with this type's operations.
     type Error;
@@ -70,6 +158,35 @@ pub trait Fallible {
 
 /// Equips a type with a `Fallible` implementation that chooses `E` as its error
 /// type.
+///
+/// # Example
+///
+/// ```
+/// use rancor::{Failure, Fallible, Strategy};
+///
+/// trait Print<E = <Self as Fallible>::Error> {
+///     fn print(&self, message: &str) -> Result<(), E>;
+/// }
+///
+/// impl<T: Print<E> + ?Sized, E> Print<E> for Strategy<T, E> {
+///     fn print(&self, message: &str) -> Result<(), E> {
+///         T::print(self, message)
+///     }
+/// }
+///
+/// struct StdOut;
+///
+/// impl<E> Print<E> for StdOut {
+///     fn print(&self, message: &str) -> Result<(), E> {
+///         println!("{message}");
+///         Ok(())
+///     }
+/// }
+///
+/// Strategy::<_, Failure>::wrap(&mut StdOut)
+///     .print("hello world")
+///     .unwrap();
+/// ```
 #[repr(transparent)]
 pub struct Strategy<T: ?Sized, E> {
     _error: PhantomData<E>,
@@ -131,6 +248,35 @@ impl<T: ?Sized, E> DerefMut for Strategy<T, E> {
 }
 
 /// Returns the given error from this function.
+///
+/// The current function must return a `Result<_, E>` where `E` implements
+/// [`Source`].
+///
+/// # Example
+///
+/// ```
+/// use core::{error::Error, fmt};
+///
+/// use rancor::{fail, Source};
+///
+/// #[derive(Debug)]
+/// struct DivideByZeroError;
+///
+/// impl fmt::Display for DivideByZeroError {
+///     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+///         write!(f, "attempted to divide by zero")
+///     }
+/// }
+///
+/// impl Error for DivideByZeroError {}
+///
+/// fn divide<E: Source>(a: i32, b: i32) -> Result<i32, E> {
+///     if b == 0 {
+///         fail!(DivideByZeroError);
+///     }
+///     Ok(a / b)
+/// }
+/// ```
 #[macro_export]
 macro_rules! fail {
     ($($x:tt)*) => {
@@ -141,6 +287,14 @@ macro_rules! fail {
 /// Helper methods for `Result`s.
 pub trait ResultExt<T, E> {
     /// Returns a `Result` with this error type converted to `U`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use rancor::{Failure, ResultExt as _};
+    ///
+    /// let result = "1_000".parse::<i32>().into_error::<Failure>();
+    /// ```
     fn into_error<U>(self) -> Result<T, U>
     where
         U: Source,
@@ -148,6 +302,16 @@ pub trait ResultExt<T, E> {
 
     /// Returns a `Result` with this error type converted to `U` and with an
     /// additional `trace` message added.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use rancor::{BoxedError, ResultExt as _};
+    ///
+    /// let result = "1_000"
+    ///     .parse::<i32>()
+    ///     .into_trace::<BoxedError, _>("while parsing 1_000");
+    /// ```
     fn into_trace<U, R>(self, trace: R) -> Result<T, U>
     where
         U: Source,
@@ -157,6 +321,20 @@ pub trait ResultExt<T, E> {
     /// Returns a `Result` with this error type converted to `U` and with an
     /// additional trace message added by evaluating the given function `f`. The
     /// function is evaluated only if an error occurred.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use rancor::{BoxedError, ResultExt as _};
+    ///
+    /// let input = "1_000";
+    /// let result =
+    ///     input
+    ///         .parse::<i32>()
+    ///         .into_with_trace::<BoxedError, _, _>(|| {
+    ///             format!("while parsing {input}")
+    ///         });
+    /// ```
     fn into_with_trace<U, R, F>(self, f: F) -> Result<T, U>
     where
         U: Source,
@@ -165,6 +343,17 @@ pub trait ResultExt<T, E> {
         E: error::Error + Send + Sync + 'static;
 
     /// Adds an additional `trace` message to the error value of this type.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use rancor::{BoxedError, ResultExt as _};
+    ///
+    /// let result = "1_000"
+    ///     .parse::<i32>()
+    ///     .into_error::<BoxedError>()
+    ///     .trace("while parsing 1_000");
+    /// ```
     fn trace<R>(self, trace: R) -> Result<T, E>
     where
         R: fmt::Debug + fmt::Display + Send + Sync + 'static,
@@ -173,6 +362,18 @@ pub trait ResultExt<T, E> {
     /// Adds an additional trace message to the error value of this type by
     /// evaluating the given function `f`. The function is evaluated only if an
     /// error occurred.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use rancor::{BoxedError, ResultExt as _};
+    ///
+    /// let input = "1_000";
+    /// let result = input
+    ///     .parse::<i32>()
+    ///     .into_error::<BoxedError>()
+    ///     .with_trace(|| format!("while parsing {input}"));
+    /// ```
     fn with_trace<R, F>(self, f: F) -> Result<T, E>
     where
         R: fmt::Debug + fmt::Display + Send + Sync + 'static,
@@ -183,6 +384,14 @@ pub trait ResultExt<T, E> {
     ///
     /// In order to call this method, the error type of this `Result` must be a
     /// [`Never`] type.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use rancor::{Infallible, ResultExt};
+    ///
+    /// let inner = Ok::<i32, Infallible>(10).always_ok();
+    /// ```
     fn always_ok(self) -> T
     where
         E: Never;
@@ -263,12 +472,30 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
 pub trait OptionExt<T> {
     /// Returns a `Result` with an error indicating that `Some` was expected but
     /// `None` was found.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use rancor::{Failure, OptionExt};
+    ///
+    /// let result = Some(10).into_error::<Failure>();
+    /// ```
     fn into_error<E>(self) -> Result<T, E>
     where
         E: Source;
 
     /// Returns a `Result` with an error indicating that `Some` was expected but
     /// `None` was found, and with an additional `trace` message added.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use rancor::{Failure, OptionExt};
+    ///
+    /// ##[rustfmt::skip]
+    /// let result = Some(10).
+    ///     into_trace::<Failure, _>("while converting Some(10)");
+    /// ```
     fn into_trace<E, R>(self, trace: R) -> Result<T, E>
     where
         E: Source,
@@ -278,6 +505,17 @@ pub trait OptionExt<T> {
     /// `None` was found, and with an additional trace message added by
     /// evaluating the given function `f`. The function is evaluated only if an
     /// error occurred.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use rancor::{Failure, OptionExt};
+    ///
+    /// let input = Some(10);
+    /// let result = input.into_with_trace::<Failure, _, _>(|| {
+    ///     format!("while converting {input:?}")
+    /// });
+    /// ```
     fn into_with_trace<E, R, F>(self, f: F) -> Result<T, E>
     where
         E: Source,
@@ -298,6 +536,18 @@ pub unsafe trait Never {}
 /// Consumes a `Never` type, returning a primitive `!`.
 ///
 /// This is a safe version of [`unreachable_unchecked`] for `Never` types.
+///
+/// # Example
+///
+/// ```
+/// use rancor::{unreachable_checked, Infallible};
+///
+/// let result = Ok::<i32, Infallible>(10);
+/// match result {
+///     Ok(i) => println!("i"),
+///     Err(e) => unreachable_checked(e),
+/// }
+/// ```
 #[inline(always)]
 pub const fn unreachable_checked<T: Never>(_: T) -> ! {
     // SAFETY: Types that implement `Never` cannot be constructed,
@@ -351,6 +601,7 @@ impl<T> OptionExt<T> for Option<T> {
     }
 }
 
+/// A re-export of `core::convert::Infallible`.
 pub use core::convert::Infallible;
 
 // SAFETY: `Infallible` is an enum with no variants, and so cannot be produced.
@@ -366,6 +617,9 @@ impl Trace for Infallible {
 }
 
 /// An error type that does not occupy any space, panicking on creation instead.
+///
+/// Because panicking occurs immediately upon creation, this error type will not
+/// print any additional trace information.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Panic {}
 
