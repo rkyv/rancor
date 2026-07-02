@@ -695,6 +695,20 @@ pub struct Error {
     inner: ErrorType,
 }
 
+impl Error {
+    /// Returns the inner error as a `dyn Error`.
+    pub fn inner(this: &Self) -> &(dyn error::Error + 'static) {
+        #[cfg(all(debug_assertions, feature = "alloc"))]
+        {
+            BoxedError::inner(&this.inner)
+        }
+        #[cfg(not(all(debug_assertions, feature = "alloc")))]
+        {
+            &this.inner
+        }
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.inner)?;

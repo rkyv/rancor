@@ -40,6 +40,13 @@ pub struct BoxedError {
     inner: ThinBox<dyn error::Error + Send + Sync + 'static>,
 }
 
+impl BoxedError {
+    /// Returns the inner error as a `dyn Error`.
+    pub fn inner(this: &Self) -> &(dyn error::Error + 'static) {
+        &*this.inner
+    }
+}
+
 impl fmt::Display for BoxedError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.inner)
