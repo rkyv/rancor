@@ -280,7 +280,7 @@ impl<T: ?Sized, E> DerefMut for Strategy<T, E> {
 #[macro_export]
 macro_rules! fail {
     ($($x:tt)*) => {
-        return ::core::result::Result::Err($crate::Source::new($($x)*));
+        return ::core::result::Result::Err($crate::Source::new($($x)*))
     };
 }
 
